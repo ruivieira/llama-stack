@@ -51,6 +51,12 @@ providers:
         type: sqlite
         namespace: null
         db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/remote-vllm}/meta_reference_eval.db
+  - provider_id: lmeval
+    provider_type: remote::lmeval
+    config:
+      use_k8s: true
+      namespace: "test"
+      service_account: "lmeval-sa"
   datasetio:
   - provider_id: huggingface
     provider_type: remote::huggingface

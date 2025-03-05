@@ -1,8 +1,78 @@
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from __future__ import annotations
 
+from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+
+from llama_stack.apis.eval import BenchmarkConfig, EvalCandidate
 from llama_stack.schema_utils import json_schema_type
 
+
+
+
+@json_schema_type
+@dataclass
+class LMEvalBenchmarkConfig(BenchmarkConfig):
+    """Configuration for LMEval benchmark that extends the base BenchmarkConfig"""
+    
+    # K8s specific configuration
+    model: str
+    eval_candidate: EvalCandidate
+
+    def __post_init__(self):
+        """Validate configuration"""
+        super().__post_init__()
+        
+        if not self.model:
+            raise ValueError("model must be provided")
+    
+    def to_k8s_cr(self) -> Dict[str, Any]:
+        """Convert configuration to Kubernetes CR format"""
+        cr = {
+            "apiVersion": "trustyai.opendatahub.io/v1alpha1",
+            "kind": "LMEvalJob",
+            "metadata": {
+                "name": f"evaljob-{self.model.lower()}-1"
+            },
+            "spec": {
+                "model": self.model,
+                "modelArgs": "",
+                "taskList": "",
+                "logSamples": "",
+                "pod": {"container": {"env": ""}},
+            },
+        }
+        
+        return cr
+    
+    @classmethod
+    def from_k8s_cr(cls, cr: Dict[str, Any]) -> "LMEvalBenchmarkConfig":
+        """Create configuration from Kubernetes CR"""
+        spec = cr.get("spec", {})
+        
+        # Extract values from CR
+        model = spec.get("model", "hf")
+        model_args = spec.get("modelArgs", [])
+        task_list = spec.get("taskList", {"taskNames": ["unfair_tos"]})
+        log_samples = spec.get("logSamples", True)
+        namespace = cr.get("metadata", {}).get("namespace", "default")
+        
+        # Extract environment variables
+        env_vars = []
+        if "pod" in spec and "container" in spec["pod"]:
+            env_vars = spec["pod"]["container"].get("env", [])
+        
+        # Create config with K8s parameters
+        return cls(
+            model=model,
+            model_args=model_args,
+            task_list=task_list,
+            log_samples=log_samples,
+            namespace=namespace,
+            env_vars=env_vars,
+            # Add required BenchmarkConfig fields here
+            eval_candidate=None,
+            scoring_params={},
+        ) 
 
 @json_schema_type
 @dataclass
@@ -29,95 +99,18 @@ class K8sLMEvalConfig:
 @dataclass
 class LMEvalEvalProviderConfig:
     """Configuration for the LMEval Provider"""
-
-    eval_config: Dict[str, Any]
-    k8s_config: Optional[K8sLMEvalConfig] = None
-
+    
+    # Only include the use_k8s flag
+    use_k8s: bool = False
+    base_url: str = "/v1/completions"
     def __post_init__(self):
-        """Convert configuration dictionaries to proper config objects and validate"""
-        # Check if we're using K8s mode
-        if "use_k8s" in self.eval_config and self.eval_config["use_k8s"]:
-            # Create K8s config if not already present
-            if not self.k8s_config:
-                # Extract K8s config from eval_config
-                model = self.eval_config.get("model", "hf")
-                task_names = self.eval_config.get("task_names", ["unfair_tos"])
-                namespace = self.eval_config.get("k8s_namespace", "default")
-                log_samples = self.eval_config.get("log_samples", True)
+        """Validate configuration"""
+        if not isinstance(self.use_k8s, bool):
+            raise ValueError("use_k8s must be a boolean")
 
-                # Extract model args
-                model_args = []
-                if "model_args" in self.eval_config:
-                    model_args = self.eval_config["model_args"]
-                elif "pretrained" in self.eval_config:
-                    model_args = [{"name": "pretrained", "value": self.eval_config["pretrained"]}]
 
-                # Extract environment variables
-                env_vars = []
-                if "env_vars" in self.eval_config:
-                    env_vars = self.eval_config["env_vars"]
-                elif "hf_token" in self.eval_config:
-                    env_vars = [{"name": "HF_TOKEN", "value": self.eval_config["hf_token"]}]
-
-                self.k8s_config = K8sLMEvalConfig(
-                    model=model,
-                    model_args=model_args,
-                    task_list={"taskNames": task_names},
-                    log_samples=log_samples,
-                    namespace=namespace,
-                    env_vars=env_vars,
-                )
-
-            return
-
-    def to_k8s_cr(self) -> Dict[str, Any]:
-        """Convert configuration to Kubernetes CR format"""
-        if not self.k8s_config:
-            raise ValueError("K8s configuration is not set")
-
-        cr = {
-            "apiVersion": "trustyai.opendatahub.io/v1alpha1",
-            "kind": "LMEvalJob",
-            "metadata": {
-                "name": f"evaljob-{self.k8s_config.model.lower()}-{hash(str(self.k8s_config.task_list)) % 10000:04d}"
-            },
-            "spec": {
-                "model": self.k8s_config.model,
-                "modelArgs": self.k8s_config.model_args,
-                "taskList": self.k8s_config.task_list,
-                "logSamples": self.k8s_config.log_samples,
-                "pod": {"container": {"env": self.k8s_config.env_vars or []}},
-            },
-        }
-
-        return cr
-
-    @classmethod
-    def from_k8s_cr(cls, cr: Dict[str, Any]) -> "LMEvalEvalProviderConfig":
-        """Create configuration from Kubernetes CR"""
-        spec = cr.get("spec", {})
-
-        # Extract values from CR
-        model = spec.get("model", "hf")
-        model_args = spec.get("modelArgs", [])
-        task_list = spec.get("taskList", {"taskNames": ["unfair_tos"]})
-        log_samples = spec.get("logSamples", True)
-        namespace = cr.get("metadata", {}).get("namespace", "default")
-
-        # Extract environment variables
-        env_vars = []
-        if "pod" in spec and "container" in spec["pod"]:
-            env_vars = spec["pod"]["container"].get("env", [])
-
-        # Create K8s config
-        k8s_config = K8sLMEvalConfig(
-            model=model,
-            model_args=model_args,
-            task_list=task_list,
-            log_samples=log_samples,
-            namespace=namespace,
-            env_vars=env_vars,
-        )
-
-        # Create provider config with K8s mode enabled
-        return cls(eval_config={"use_k8s": True}, k8s_config=k8s_config)
+__all__ = [
+    "LMEvalBenchmarkConfig",
+    "K8sLMEvalConfig",
+    "LMEvalEvalProviderConfig"
+]

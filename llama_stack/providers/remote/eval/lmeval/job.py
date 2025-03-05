@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
-from dataclasses import dataclass
-from enum import Enum, auto
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from llama_stack.apis.common.job_types import Job, JobStatus
 from llama_stack.apis.eval import Eval, BenchmarkConfig, EvaluateResponse
 from llama_stack.providers.datatypes import BenchmarksProtocolPrivate
+from llama_stack.providers.remote.eval.lmeval import LMEvalEvalProviderConfig
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -32,7 +31,12 @@ class LMEvalValidationError(LMEvalError):
 
     pass
 
-class BaseLMEval(Eval, BenchmarksProtocolPrivate, ABC):
+class LMEval(Eval, BenchmarksProtocolPrivate):
+    def __init__(self, config: LMEvalEvalProviderConfig):
+        self._config = config
+        self.k8s_config = config.eval_config["use_k8s"]
+
+
     async def initialize(self):
         print("Initializing Base LMEval")
 
@@ -85,6 +89,7 @@ class BaseLMEval(Eval, BenchmarksProtocolPrivate, ABC):
             return Job(job_id=f"k8s-{cr_spec['metadata']['name']}")
 
         # TODO: Reserved for non-K8s evaluations
+        return Job(job_id="Not used")
 
     async def job_status(self, benchmark_id: str, job_id: str) -> Optional[JobStatus]:
         pass

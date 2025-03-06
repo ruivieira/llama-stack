@@ -9,6 +9,9 @@ from llama_stack.apis.eval import Eval, BenchmarkConfig, EvaluateResponse
 from llama_stack.providers.datatypes import BenchmarksProtocolPrivate
 from llama_stack.providers.remote.eval.lmeval.config import LMEvalEvalProviderConfig, LMEvalBenchmarkConfig
 
+from kubernetes import config, dynamic
+from kubernetes.client import api_client
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -33,11 +36,18 @@ class LMEvalValidationError(LMEvalError):
 
 
 class LMEval(Eval, BenchmarksProtocolPrivate):
-    def __init__(self, 
+    def __init__(self,
                  config: LMEvalEvalProviderConfig):
         self._config = config
         self.use_k8s = config.use_k8s
-
+        if self.use_k8s:
+            try:
+                k8s_client = config.load_incluster_config()
+            except config.ConfigException:
+                k8s_client = config.load_kube_config()
+            self.dyn_client = dynamic.DynamicClient(
+                api_client.ApiClient(configuration=k8s_client)
+            )
 
     async def initialize(self):
         logger.info("Initializing Base LMEval")
@@ -58,16 +68,19 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
         """
         # Check if we're using K8s mode
         if self.use_k8s:
+
             # Ensure task_config is a BenchmarkConfig
             if not isinstance(task_config, BenchmarkConfig):
                 raise LMEvalConfigError("K8s mode requires BenchmarkConfig")
-            
+
             # Generate K8s CR from the benchmark config
             cr = self._create_lmeval_cr(benchmark_id, task_config)
-
-            # TODO: Submit the CR to K8s (implementation would depend on K8s client)
             logger.info(f"Generated LMEval CR for benchmark {benchmark_id}: {cr}")
 
+            lmeval_api = self.dyn_client.resources.get(
+                api_version="trustyai.opendatahub.io/v1alpha1", kind="LMEvalJob"
+            )
+            lmeval_api.create(body=cr)
             # Return job ID (for now just use a placeholder)
             return Job(job_id="lmeval-job-1")
         else:
@@ -155,9 +168,16 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
             JobStatus: Current status of the job
         """
         if self.use_k8s:
-            # TODO: Implement K8s job status checking
-            # For now, return a placeholder status
-            return JobStatus.in_progress
+            lmeval_api = self.dyn_client.resources.get(
+                api_version="trustyai.opendatahub.io/v1alpha1", kind="LMEvalJob"
+            )
+            job_status = lmeval_api.get(name=job_id)
+            if job_status["status"]["state"] == "completed":
+                return JobStatus.completed
+            if job_status["status"]["state"] == "failed":
+                return JobStatus.failed
+            else:
+                return JobStatus.in_progress
         else:
             raise NotImplementedError("Non-K8s evaluation not implemented yet")
 
@@ -186,9 +206,13 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
         """
         if self.use_k8s:
             # TODO: Implement K8s job result retrieval
+            lmeval_api = self.dyn_client.resources.get(
+                api_version="trustyai.opendatahub.io/v1alpha1", kind="LMEvalJob"
+            )
+            results = lmeval_api.get(name=job_id)["status"]["results"]
             # For now, return a placeholder result with the correct structure
             from llama_stack.apis.scoring import ScoringResult
-
+            # TODO: Extract actual results from job_status
             # Create a placeholder scoring result
             scoring_result = ScoringResult(
                 aggregated_results={"accuracy": 0.75, "f1_score": 0.8}, score_rows=[{"score": 0.8}]

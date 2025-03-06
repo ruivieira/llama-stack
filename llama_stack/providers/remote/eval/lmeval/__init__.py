@@ -1,9 +1,10 @@
 import logging
-from typing import Any, Dict, Union
+from typing import Dict, Optional
 
 from llama_stack.apis.eval import Eval
+from llama_stack.distribution.datatypes import Api, ProviderSpec
 from llama_stack.providers.remote.eval.lmeval.config import LMEvalEvalProviderConfig
-
+from llama_stack.apis.inference import Inference
 from llama_stack.providers.remote.eval.lmeval.job import LMEval
 
 # Set up logging
@@ -11,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 async def get_adapter_impl(
         config: LMEvalEvalProviderConfig,
-        _deps: Dict[str, Any] = None,
+        deps: Optional[Dict[Api, ProviderSpec]] = None,
 ) -> LMEval:
     """Get appropriate LMEval implementation(s) based on config type.
 
     Args:
         config: LMEval configuration instance
-        _deps: Optional dependencies for testing/injection
+        deps: Optional dependencies for testing/injection
 
     Returns:
         Configured LMEval implementation
@@ -26,10 +27,23 @@ async def get_adapter_impl(
         Exception: If configuration is invalid
     """
     try:
+        if deps is None:
+            deps = {}
+        
+        
+        # Extract base_url from config if available
+        base_url = None
+        if hasattr(config, 'model_args') and config.model_args:
+            for arg in config.model_args:
+                if arg.get('name') == 'base_url':
+                    base_url = arg.get('value')
+                    logger.info(f"Using base_url from config: {base_url}")
+                    break
+        
         return LMEval(config=config)
     except Exception as e:
         raise Exception(
-            f"Failed to create detector implementation: {str(e)}"
+            f"Failed to create LMEval implementation: {str(e)}"
         ) from e
 
 

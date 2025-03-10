@@ -1,43 +1,21 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC
 from typing import Optional
 
 from llama_stack.apis.common.job_types import Job, JobStatus
-from llama_stack.apis.eval import Eval, BenchmarkConfig, EvaluateResponse
+from llama_stack.apis.eval import BenchmarkConfig, Eval, EvaluateResponse
 from llama_stack.providers.datatypes import BenchmarksProtocolPrivate
-from llama_stack.providers.remote.eval.lmeval.config import LMEvalEvalProviderConfig, LMEvalBenchmarkConfig
+from llama_stack.providers.remote.eval.lmeval.config import LMEvalEvalProviderConfig
+from llama_stack.providers.remote.eval.lmeval.errors import LMEvalConfigError
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
-# Custom exceptions
-class LMEvalError(Exception):
-    """Base exception for LMEval errors"""
-
-    pass
-
-
-class LMEvalConfigError(LMEvalError):
-    """Configuration related errors"""
-
-    pass
-
-
-class LMEvalValidationError(LMEvalError):
-    """Validation related errors"""
-
-    pass
-
-
 class LMEval(Eval, BenchmarksProtocolPrivate):
-    def __init__(self, 
-                 config: LMEvalEvalProviderConfig):
+    def __init__(self, config: LMEvalEvalProviderConfig):
         self._config = config
-        self.use_k8s = config.use_k8s
-
 
     async def initialize(self):
         logger.info("Initializing Base LMEval")
@@ -61,7 +39,7 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
             # Ensure task_config is a BenchmarkConfig
             if not isinstance(task_config, BenchmarkConfig):
                 raise LMEvalConfigError("K8s mode requires BenchmarkConfig")
-            
+
             # Generate K8s CR from the benchmark config
             cr = self._create_lmeval_cr(benchmark_id, task_config)
 
@@ -125,7 +103,8 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
             "apiVersion": "trustyai.opendatahub.io/v1alpha1",
             "kind": "LMEvalJob",
             "metadata": {
-                "name": f"lmeval-{benchmark_id}".lower().replace(":", "-").replace("_", "-"),
+                # TODO: Add random suffix to avoid collisions
+                "name": f"lmeval-{benchmark_id}".lower().replace(":", "-"),
             },
             "spec": {
                 "model": "local-completions",  # Default model type

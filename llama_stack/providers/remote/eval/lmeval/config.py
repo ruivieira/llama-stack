@@ -100,6 +100,8 @@ class LMEvalEvalProviderConfig:
 
     use_k8s: bool = True
     base_url: str = "/v1/completions"
+    namespace: str = "default"
+    kubeconfig_path: Optional[str] = None
 
     def __post_init__(self):
         """Validate configuration"""

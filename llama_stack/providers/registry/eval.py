@@ -27,16 +27,16 @@ def available_providers() -> List[ProviderSpec]:
         ),
         RemoteProviderSpec(
             api=Api.eval,
-            pip_packages=[],
+            pip_packages=["kubernetes"],
             module="llama_stack.providers.remote.eval.lmeval",
             config_class="llama_stack.providers.remote.eval.lmeval.config.LMEvalEvalProviderConfig",
             api_dependencies=[
                 Api.inference,
             ],
             adapter=AdapterSpec(
-                adapter_type="lmeval",    
+                adapter_type="lmeval",
                 module="llama_stack.providers.remote.eval.lmeval",
             ),
             provider_type="remote::lmeval",
-        )
+        ),
     ]

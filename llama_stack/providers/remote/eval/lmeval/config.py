@@ -56,11 +56,13 @@ class LMEvalEvalProviderConfig:
 
     use_k8s: bool = True
     # FIXME: Hardcoded just for debug purposes
-    base_url: str = "http://llamastack-service:8321/v1/completions"
+    base_url: str = "http://llamastack-service:8321/v1/completion"
     namespace: str = "test"
     kubeconfig_path: Optional[str] = None
     # Service account to use for Kubernetes deployment
     service_account: Optional[str] = None
+    # Default tokenizer to use when none is specified in the ModelCandidate
+    default_tokenizer: str = "google/flan-t5-base"
 
     def __post_init__(self):
         """Validate the configuration"""

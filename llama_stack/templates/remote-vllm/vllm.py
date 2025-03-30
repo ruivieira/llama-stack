@@ -25,7 +25,6 @@ def get_distribution_template() -> DistributionTemplate:
     providers = {
         "inference": ["remote::vllm", "inline::sentence-transformers"],
         "vector_io": ["inline::faiss", "remote::chromadb", "remote::pgvector"],
-        "safety": ["inline::llama-guard"],
         "agents": ["inline::meta-reference"],
         "eval": ["inline::meta-reference"],
         "datasetio": ["remote::huggingface", "inline::localfs"],
@@ -62,10 +61,6 @@ def get_distribution_template() -> DistributionTemplate:
     inference_model = ModelInput(
         model_id="${env.INFERENCE_MODEL}",
         provider_id="vllm-inference",
-    )
-    safety_model = ModelInput(
-        model_id="${env.SAFETY_MODEL}",
-        provider_id="vllm-safety",
     )
     embedding_model = ModelInput(
         model_id="all-MiniLM-L6-v2",
@@ -113,23 +108,14 @@ def get_distribution_template() -> DistributionTemplate:
                 provider_overrides={
                     "inference": [
                         inference_provider,
-                        Provider(
-                            provider_id="vllm-safety",
-                            provider_type="remote::vllm",
-                            config=VLLMInferenceAdapterConfig.sample_run_config(
-                                url="${env.SAFETY_VLLM_URL}",
-                            ),
-                        ),
                         embedding_provider,
                     ],
                     "vector_io": [vector_io_provider],
                 },
                 default_models=[
                     inference_model,
-                    safety_model,
                     embedding_model,
                 ],
-                default_shields=[ShieldInput(shield_id="${env.SAFETY_MODEL}")],
                 default_tool_groups=default_tool_groups,
             ),
         },
@@ -139,7 +125,7 @@ def get_distribution_template() -> DistributionTemplate:
                 "Port for the Llama Stack distribution server",
             ),
             "INFERENCE_MODEL": (
-                "meta-llama/Llama-3.2-3B-Instruct",
+                "tinyllama",
                 "Inference model loaded into the vLLM server",
             ),
             "VLLM_URL": (
@@ -149,14 +135,6 @@ def get_distribution_template() -> DistributionTemplate:
             "MAX_TOKENS": (
                 "4096",
                 "Maximum number of tokens for generation",
-            ),
-            "SAFETY_VLLM_URL": (
-                "http://host.docker.internal:5101/v1",
-                "URL of the vLLM server with the safety model",
-            ),
-            "SAFETY_MODEL": (
-                "meta-llama/Llama-Guard-3-1B",
-                "Name of the safety (Llama-Guard) model to use",
             ),
         },
     )

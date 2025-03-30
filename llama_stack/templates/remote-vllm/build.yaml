@@ -9,10 +9,6 @@ distribution_spec:
     - inline::faiss
     - remote::chromadb
     - remote::pgvector
-    safety:
-    - inline::llama-guard
-    agents:
-    - inline::meta-reference
     eval:
     - inline::meta-reference
     - remote::lmeval

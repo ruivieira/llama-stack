@@ -86,6 +86,7 @@ class LMEvalCRBuilder:
         """
         self._namespace = namespace
         self._service_account = service_account
+        self._config = None
 
     def create_cr(self, benchmark_id: str, task_config: BenchmarkConfig, base_url: Optional[str] = None) -> dict:
         """Create LMEval Custom Resource from a Llama Stack BenchmarkConfig.
@@ -119,18 +120,20 @@ class LMEvalCRBuilder:
         if base_url:
             model_args.append(ModelArg(name="base_url", value=base_url))
 
-        # Default parameters
-        model_args.extend(
-            [
-                ModelArg(name="num_concurrent", value="1"),
-                ModelArg(name="max_retries", value="3"),
-                ModelArg(name="tokenized_requests", value="False"),
-            ]
-        )
+        # FIXME: This should be configurable
+        model_args.append(ModelArg(name="tokenized_requests", value="False"))
 
-        # Add tokenizer, if specified
-        if hasattr(eval_candidate, "tokenizer"):
-            model_args.append(ModelArg(name="tokenizer", value=eval_candidate.tokenizer))
+        tokenizer = None
+        if hasattr(task_config, "metadata") and task_config.metadata:
+            tokenizer = task_config.metadata.get("tokenizer")
+        
+        if not tokenizer and hasattr(eval_candidate, "tokenizer"):
+            tokenizer = eval_candidate.tokenizer
+        
+        if not tokenizer and self._config and hasattr(self._config, "default_tokenizer"):
+            tokenizer = self._config.default_tokenizer
+            
+        model_args.append(ModelArg(name="tokenizer", value=tokenizer))
 
         env_vars = []
         if hasattr(task_config, "env_vars") and task_config.env_vars:
@@ -176,8 +179,10 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
         if self.use_k8s:
             self._init_k8s_client()
             self._cr_builder = LMEvalCRBuilder(
-                namespace=self._namespace, service_account=getattr(self._config, "service_account", None)
+                namespace=self._namespace, 
+                service_account=getattr(self._config, "service_account", None)
             )
+            self._cr_builder._config = self._config
 
     def _init_k8s_client(self):
         """Initialize the Kubernetes client."""
@@ -246,7 +251,7 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
         self,
         benchmark_id: str,
         benchmark_config: BenchmarkConfig,
-    ) -> Job:
+    ) -> Dict[str, str]:
         """Run an evaluation for a specific benchmark and configuration.
 
         Args:
@@ -254,7 +259,7 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
             benchmark_config: Configuration for the evaluation task
 
         Returns:
-            Job: Job identifier for tracking the evaluation
+            Dict containing job_id for evaluation tracking
         """
         if self.use_k8s:
             if not isinstance(benchmark_config, BenchmarkConfig):
@@ -267,8 +272,9 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
             )
             logger.info(f"Generated LMEval CR for benchmark {benchmark_id}: {cr}")
 
-            _job_id = len(self._jobs)
-            _job = Job(job_id=f"lmeval-job-{_job_id}", status=JobStatus.scheduled, metadata={"created_at": str(time())})
+            _job_id = f"lmeval-job-{len(self._jobs)}"
+
+            _job = Job(job_id=_job_id, status=JobStatus.scheduled, metadata={"created_at": str(time())})
             self._jobs.append(_job)
 
             # Deploy LMEvalJob
@@ -289,13 +295,15 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
 
                 logger.info(f"Successfully deployed LMEval CR to Kubernetes: {response['metadata']['name']}")
 
-                _job.metadata = {"k8s_name": cr["metadata"]["name"]}
+                _job.metadata["k8s_name"] = cr["metadata"]["name"]
 
             except ApiException as e:
                 logger.error(f"Failed to deploy LMEval CR to Kubernetes: {e}")
+                _job.status = JobStatus.failed
+                _job.metadata["error"] = str(e)
                 raise LMEvalConfigError(f"Failed to deploy LMEval CR: {e}")
 
-            return _job
+            return {"job_id": _job_id}
         else:
             # TODO: Handle non-K8s evaluation
             raise NotImplementedError("Non-K8s evaluation not implemented yet")
@@ -337,7 +345,7 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
         else:
             raise NotImplementedError("Non-K8s evaluation not implemented yet")
 
-    async def job_status(self, benchmark_id: str, job_id: str) -> Optional[JobStatus]:
+    async def job_status(self, benchmark_id: str, job_id: str) -> Optional[Dict[str, str]]:
         """Get the status of a running evaluation job.
 
         Args:
@@ -345,7 +353,7 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
             job_id: The job id
 
         Returns:
-            JobStatus: Current status of the job
+            Dict with current status of the job
         """
         if self.use_k8s:
             job = next((j for j in self._jobs if j.job_id == job_id), None)
@@ -357,7 +365,7 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
                 k8s_name = job.metadata.get("k8s_name") if hasattr(job, "metadata") else None
                 if not k8s_name:
                     logger.warning(f"No K8s resource name found for job {job_id}")
-                    return JobStatus.unknown
+                    return {"job_id": job_id, "status": JobStatus.unknown}
 
                 group = "trustyai.opendatahub.io"
                 version = "v1alpha1"
@@ -367,20 +375,32 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
                     group=group, version=version, namespace=self._namespace, plural=plural, name=k8s_name
                 )
 
-                status = cr.get("status", {}).get("state", "unknown")
+                status = cr.get("status", {})
+                state = status.get("state", "")
+                reason = status.get("reason", "")
+                message = status.get("message", "")
+                
+                logger.info(f"Job {job_id} status: state={state}, reason={reason}, message={message}")
 
-                if status == "Completed":
-                    return JobStatus.completed
-                elif status == "Failed":
-                    return JobStatus.failed
-                elif status in ["Running", "Pending"]:
-                    return JobStatus.in_progress
-                else:
-                    return JobStatus.unknown
+                job_status = JobStatus.unknown
+                if state == "Complete":
+                    if reason == "Failed":
+                        job_status = JobStatus.failed
+                    else:
+                        job_status = JobStatus.completed
+                elif state == "Running":
+                    job_status = JobStatus.in_progress
+                elif state == "Pending":
+                    job_status = JobStatus.scheduled
+
+                return {
+                    "job_id": job_id,
+                    "status": job_status
+                }
 
             except ApiException as e:
                 logger.error(f"Failed to get job status from Kubernetes: {e}")
-                return JobStatus.unknown
+                return {"job_id": job_id, "status": JobStatus.unknown}
         else:
             raise NotImplementedError("Non-K8s evaluation not implemented yet")
 
@@ -450,12 +470,30 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
                     group=group, version=version, namespace=self._namespace, plural=plural, name=k8s_name
                 )
 
-                status = cr.get("status", {}).get("state", "unknown")
-                if status != "Completed":
-                    logger.warning(f"Job {job_id} is not completed yet (status: {status})")
+                status = cr.get("status", {})
+                state = status.get("state", "")
+                reason = status.get("reason", "")
+                message = status.get("message", "")
+
+                if state != "Complete":
+                    logger.warning(f"Job {job_id} is not completed yet (state: {state})")
                     return EvaluateResponse(generations=[], scores={})
 
-                results = cr.get("status", {}).get("results", {})
+                metadata = {
+                    "state": state,
+                    "reason": reason,
+                    "message": message
+                }
+
+                results = status.get("results", {})
+
+                if reason == "Failed" and not results:
+                    logger.warning(f"Job {job_id} failed: {message}")
+                    return EvaluateResponse(
+                        generations=[], 
+                        scores={}, 
+                        metadata=metadata
+                    )
 
                 from llama_stack.apis.scoring import ScoringResult
 
@@ -477,11 +515,11 @@ class LMEval(Eval, BenchmarksProtocolPrivate):
                             aggregated_results={metric_name: metric_value}, score_rows=score_rows
                         )
 
-                return EvaluateResponse(generations=generations, scores=scores)
+                return EvaluateResponse(generations=generations, scores=scores, metadata=metadata)
 
             except ApiException as e:
                 logger.error(f"Failed to get job results from Kubernetes: {e}")
-                return EvaluateResponse(generations=[], scores={})
+                return EvaluateResponse(generations=[], scores={}, metadata={"error": str(e)})
         else:
             raise NotImplementedError("Non-K8s evaluation not implemented yet")
 

@@ -147,7 +147,7 @@ def get_distribution_template() -> DistributionTemplate:
                 "URL of the vLLM server with the main inference model",
             ),
             "MAX_TOKENS": (
-                "4096",
+                "1800",
                 "Maximum number of tokens for generation",
             ),
             "SAFETY_VLLM_URL": (

@@ -1,0 +1,10 @@
+FROM --platform=linux/amd64 quay.io/aipcc/base-images/cpu:2.0-1749153990
+WORKDIR /opt/app-root
+
+RUN pip install sqlalchemy # somehow sqlalchemy[asyncio] is not sufficient
+{dependencies}
+RUN pip install --no-cache llama-stack==0.2.10
+RUN mkdir -p /opt/app-root/.llama/providers.d /opt/app-root/.cache
+COPY redhat-distribution/run.yaml /opt/app-root/run.yaml
+COPY redhat-distribution/providers.d /opt/app-root/.llama/providers.d
+ENTRYPOINT ["python", "-m", "llama_stack.distribution.server.server", "--config", "/opt/app-root/run.yaml"]

@@ -5,7 +5,7 @@ FROM --platform=linux/amd64 quay.io/aipcc/base-images/cpu:2.0-1749153990
 WORKDIR /opt/app-root
 
 RUN pip install sqlalchemy # somehow sqlalchemy[asyncio] is not sufficient
-RUN pip install aiosqlite autoevals chardet datasets fastapi fire httpx kubernetes llama_stack_provider_lmeval==0.1.4 llama_stack_provider_trustyai_fms==0.1.2 matplotlib mcp nltk numpy openai opentelemetry-exporter-otlp-proto-http opentelemetry-sdk pandas pillow psycopg2-binary pymilvus pymongo pypdf redis requests scikit-learn scipy sentencepiece sqlalchemy[asyncio] tqdm transformers uvicorn
+RUN pip install aiosqlite autoevals chardet datasets fastapi fire httpx kubernetes llama_stack_provider_lmeval==0.1.5 llama_stack_provider_trustyai_fms==0.1.2 matplotlib mcp nltk numpy openai opentelemetry-exporter-otlp-proto-http opentelemetry-sdk pandas pillow psycopg2-binary pymilvus pymongo pypdf redis requests scikit-learn scipy sentencepiece sqlalchemy[asyncio] tqdm transformers uvicorn
 RUN pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 RUN pip install --no-deps sentence-transformers
 RUN pip install --no-cache llama-stack==0.2.10

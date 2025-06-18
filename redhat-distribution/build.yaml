@@ -27,7 +27,7 @@ distribution_spec:
     - remote::tavily-search
     - inline::rag-runtime
     - remote::model-context-protocol
-  container_image: quay.io/aipcc/base-images/cpu:2.0-1749153990
+  container_image: registry.redhat.io/ubi9/python-311:9.6-1749631027
 additional_pip_packages:
 - aiosqlite
 - sqlalchemy[asyncio]

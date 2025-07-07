@@ -13,7 +13,10 @@ on:
 
 env:
   REGISTRY: quay.io
-  IMAGE_NAME: quay.io/opendatahub/llama-stack:odh
+  # TODO: change the tag to whatever downstream needs
+  # IMAGE_NAME: quay.io/opendatahub/llama-stack:odh
+  # For now, use the commit SHA that triggered the workflow.
+  IMAGE_NAME: quay.io/opendatahub/llama-stack:${{ github.sha }}
 
 jobs:
   build-and-push:

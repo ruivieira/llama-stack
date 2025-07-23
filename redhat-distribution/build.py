@@ -12,12 +12,49 @@ import subprocess
 import sys
 from pathlib import Path
 
+BASE_REQUIREMENTS = [
+    "llama-stack==0.2.14",
+]
+
 
 def check_llama_installed():
     """Check if llama binary is installed and accessible."""
     if not shutil.which("llama"):
         print("Error: llama binary not found. Please install it first.")
         sys.exit(1)
+
+
+def check_llama_stack_version():
+    """Check if the llama-stack version in BASE_REQUIREMENTS matches the installed version."""
+    try:
+        result = subprocess.run(
+            ["llama stack --version"],
+            shell=True,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        installed_version = result.stdout.strip()
+
+        # Extract version from BASE_REQUIREMENTS
+        expected_version = None
+        for req in BASE_REQUIREMENTS:
+            if req.startswith("llama-stack=="):
+                expected_version = req.split("==")[1]
+                break
+
+        if expected_version and installed_version != expected_version:
+            print("Error: llama-stack version mismatch!")
+            print(f"  Expected: {expected_version}")
+            print(f"  Installed: {installed_version}")
+            print(
+                "  If you just bumped the llama-stack version in BASE_REQUIREMENTS, you must update the version from .pre-commit-config.yaml"
+            )
+            sys.exit(1)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Could not check llama-stack version: {e}")
+        print("Continuing without version validation...")
 
 
 def get_dependencies():
@@ -99,6 +136,9 @@ def generate_containerfile(dependencies):
 def main():
     print("Checking llama installation...")
     check_llama_installed()
+
+    print("Checking llama-stack version...")
+    check_llama_stack_version()
 
     print("Getting dependencies...")
     dependencies = get_dependencies()

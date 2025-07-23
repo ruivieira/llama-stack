@@ -26,7 +26,7 @@ providers:
   - provider_id: milvus
     provider_type: inline::milvus
     config:
-      db_path: .llama/distributions/rh/milvus.db
+      db_path: /opt/app-root/src/.llama/distributions/rh/milvus.db
       kvstore:
         type: sqlite
         namespace: null

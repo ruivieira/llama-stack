@@ -1,0 +1,20 @@
+version: 2
+distribution_spec:
+  description: TrustyAI Shields FMS distribution of Llama Stack
+  providers:
+    inference:
+    - provider_type: remote::vllm
+    - provider_type: inline::sentence-transformers
+    safety:
+    - provider_type: remote::trustyai_fms
+    shields:
+    - provider_type: remote::trustyai_fms
+    telemetry:
+    - provider_type: inline::meta-reference
+  container_image: registry.redhat.io/ubi9/python-312:latest
+additional_pip_packages:
+- aiosqlite
+- sqlalchemy[asyncio]
+image_type: container
+image_name: llama-stack-trustyai-shields-fms
+external_providers_dir: trustyai-shields-fms-distribution/providers.d

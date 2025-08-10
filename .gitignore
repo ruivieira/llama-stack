@@ -28,3 +28,5 @@ pytest-report.xml
 .python-version
 CLAUDE.md
 .claude/
+.mypy_cache/
+.ruff_cache/

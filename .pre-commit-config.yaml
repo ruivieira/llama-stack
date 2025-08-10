@@ -145,6 +145,21 @@ repos:
         pass_filenames: false
         require_serial: true
         files: ^.github/workflows/.*$
+      - id: build-distributions
+        name: Build all distributions
+        entry: bash
+        language: system
+        pass_filenames: false
+        require_serial: true
+        always_run: true
+        args:
+          - -c
+          - |
+            echo "Building all distributions..."
+            python trustyai-garak-distribution/build.py
+            python trustyai-lmeval-distribution/build.py
+            python trustyai-shields-fms-distribution/build.py
+            echo "All distributions built successfully!"
 
 ci:
     autofix_commit_msg: 🎨 [pre-commit.ci] Auto format from pre-commit.com hooks
